@@ -43,7 +43,7 @@
 #include <QJsonObject>
 #include <QMessageBox>
 #include <QProgressDialog>
-#include <QTime>
+#include <QElapsedTimer>
 
 #include <QtSql/QSqlQuery>
 
@@ -60,7 +60,7 @@ RomCollection::RomCollection(QStringList fileTypes, QStringList romPaths, QWidge
 
 
 Rom RomCollection::addRom(QByteArray *romData, QString fileName, QString directory, QString zipFile,
-                          QSqlQuery query, bool ddRom)
+                          QSqlQuery *query, bool ddRom)
 {
     Rom currentRom;
 
@@ -77,19 +77,19 @@ Rom RomCollection::addRom(QByteArray *romData, QString fileName, QString directo
     currentRom.zipFile = zipFile;
     currentRom.sortSize = romData->size();
 
-    query.bindValue(":filename",      currentRom.fileName);
-    query.bindValue(":directory",     currentRom.directory);
-    query.bindValue(":internal_name", currentRom.internalName);
-    query.bindValue(":md5",           currentRom.romMD5);
-    query.bindValue(":zip_file",      currentRom.zipFile);
-    query.bindValue(":size",          currentRom.sortSize);
+    query->bindValue(":filename",      currentRom.fileName);
+    query->bindValue(":directory",     currentRom.directory);
+    query->bindValue(":internal_name", currentRom.internalName);
+    query->bindValue(":md5",           currentRom.romMD5);
+    query->bindValue(":zip_file",      currentRom.zipFile);
+    query->bindValue(":size",          currentRom.sortSize);
 
     if (ddRom)
-        query.bindValue(":dd_rom", 1);
+        query->bindValue(":dd_rom", 1);
     else
-        query.bindValue(":dd_rom", 0);
+        query->bindValue(":dd_rom", 0);
 
-    query.exec();
+    query->exec();
 
     if (!ddRom)
         initializeRom(&currentRom, false);
@@ -153,10 +153,10 @@ int RomCollection::addRoms()
                             *romData = byteswap(*romData);
 
                         if (romData->left(4).toHex() == "80371240") { //Z64 ROM
-                            roms.append(addRom(romData, zippedFile, romPath, fileName, query));
+                            roms.append(addRom(romData, zippedFile, romPath, fileName, &query));
                             romCount++;
                         } else if (romData->left(4).toHex() == "e848d316") { //64DD ROM
-                            ddRoms.append(addRom(romData, zippedFile, romPath, fileName, query, true));
+                            ddRoms.append(addRom(romData, zippedFile, romPath, fileName, &query, true));
                             romCount++;
                         }
 
@@ -171,10 +171,10 @@ int RomCollection::addRoms()
                         *romData = byteswap(*romData);
 
                     if (romData->left(4).toHex() == "80371240") { //Z64 ROM
-                        roms.append(addRom(romData, fileName, romPath, "", query));
+                        roms.append(addRom(romData, fileName, romPath, "", &query));
                         romCount++;
                     } else if (romData->left(4).toHex() == "e848d316") { //64DD ROM
-                        ddRoms.append(addRom(romData, fileName, romPath, "", query, true));
+                        ddRoms.append(addRom(romData, fileName, romPath, "", &query, true));
                         romCount++;
                     }
 
@@ -250,7 +250,7 @@ int RomCollection::cachedRoms(bool imageUpdated, bool onStartup)
 
     int count = 0;
     bool showProgress = false;
-    QTime checkPerformance;
+    QElapsedTimer checkPerformance;
 
     while (query.next())
     {
@@ -385,8 +385,8 @@ void RomCollection::initializeRom(Rom *currentRom, bool cached)
         } else {
             //tweak internal name by adding spaces to get better results
             QString search = currentRom->internalName;
-            search.replace(QRegExp("([a-z])([A-Z])"),"\\1 \\2");
-            search.replace(QRegExp("([^ \\d])(\\d)"),"\\1 \\2");
+            search.replace(QRegularExpression("([a-z])([A-Z])"),"\\1 \\2");
+            search.replace(QRegularExpression("([^ \\d])(\\d)"),"\\1 \\2");
             scraper->downloadGameInfo(currentRom->romMD5, search);
         }
 
@@ -406,14 +406,14 @@ void RomCollection::initializeRom(Rom *currentRom, bool cached)
         //Remove any non-standard characters
         QString regex = "[^A-Za-z 0-9 \\.,\\?'""!@#\\$%\\^&\\*\\(\\)-_=\\+;:<>\\/\\\\|\\}\\{\\[\\]`~é]*";
 
-        currentRom->gameTitle = json.value("game_title").toString().remove(QRegExp(regex));
+        currentRom->gameTitle = json.value("game_title").toString().remove(QRegularExpression(regex));
         if (currentRom->gameTitle == "") currentRom->gameTitle = getTranslation("Not found");
 
         currentRom->releaseDate = json.value("release_date").toString();
         currentRom->sortDate = json.value("release_date").toString();
-        currentRom->releaseDate.replace(QRegExp("(\\d{4})-(\\d{2})-(\\d{2})"), "\\2/\\3/\\1");
+        currentRom->releaseDate.replace(QRegularExpression("(\\d{4})-(\\d{2})-(\\d{2})"), "\\2/\\3/\\1");
 
-        currentRom->overview = json.value("overview").toString().remove(QRegExp(regex));
+        currentRom->overview = json.value("overview").toString().remove(QRegularExpression(regex));
         currentRom->esrb = json.value("rating").toString();
 
         currentRom->genre = json.value("genres").toString();
@@ -463,17 +463,20 @@ void RomCollection::setupDatabase()
         QMessageBox::warning(parent, tr("Database Not Loaded"),
                              tr("Could not connect to Sqlite database. Application may misbehave."));
 
-    QSqlQuery version = database.exec("PRAGMA user_version");
+    QSqlQuery version(database);
+    version.exec("PRAGMA user_version");
     version.next();
 
     if (version.value(0).toInt() != dbVersion) { //old database version, reset rom_collection
         version.finish();
 
-        database.exec("DROP TABLE rom_collection");
-        database.exec("PRAGMA user_version = " + QString::number(dbVersion));
+        QSqlQuery drop(database);
+        drop.exec("DROP TABLE rom_collection; PRAGMA user_version = " + QString::number(dbVersion));
+        drop.finish();
     }
 
-    database.exec(QString()
+    QSqlQuery create(database);
+    create.exec(QString()
                     + "CREATE TABLE IF NOT EXISTS rom_collection ("
                         + "rom_id INTEGER PRIMARY KEY ASC, "
                         + "filename TEXT NOT NULL, "
@@ -483,6 +486,7 @@ void RomCollection::setupDatabase()
                         + "zip_file TEXT, "
                         + "size INTEGER, "
                         + "dd_rom INTEGER)");
+    create.finish();
 
     database.close();
 }
