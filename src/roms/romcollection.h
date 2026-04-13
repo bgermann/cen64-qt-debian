@@ -47,7 +47,7 @@ class RomCollection : public QObject
     Q_OBJECT
 public:
     explicit RomCollection(QStringList fileTypes, QStringList romPaths, QWidget *parent = 0);
-    int cachedRoms(bool imageUpdated = false);
+    int cachedRoms(bool imageUpdated = false, bool onStartup = false);
     void updatePaths(QStringList romPaths);
 
     QStringList getFileTypes(bool archives = false);
@@ -67,7 +67,7 @@ private:
     void setupDatabase();
     void setupProgressDialog(int size);
 
-    Rom addRom(QByteArray *romData, QString fileName, QString directory, QString zipFile, QSqlQuery query,
+    Rom addRom(QByteArray *romData, QString fileName, QString directory, QString zipFile, QSqlQuery *query,
                bool ddRom = false);
 
     QStringList fileTypes;

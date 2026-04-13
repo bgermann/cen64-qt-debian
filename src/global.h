@@ -41,14 +41,11 @@ const QString AppNameLower      = "cen64-qt";
 const QString ParentName        = "CEN64";
 const QString ParentNameLower   = "cen64";
 
-const QString Description = QObject::tr("A basic frontend for <ParentName> using Qt.").replace("<ParentName>",ParentName);
 const QString Copyright = "CEN64 Copyright (c) 2013, Tyler J. Stachecki";
-const QString Website = "<a href=\"http://www.cen64.com/\">"
-        + QObject::tr("<ParentName> website").replace("<ParentName>",ParentName)
-        + "</a>";
-const QString GitHub = "<a href=\"https://github.com/dh4/cen64-qt\">"
-        + QObject::tr("GitHub repository")
-        + "</a>";
+const QString Website = "https://github.com/n64dev/cen64";
+const QString GitHub = "https://github.com/dh4/cen64-qt";
+
+const QString TheGamesDBAPIKey = "750dbe45c2f1c63dd3a730b0ef0923ec448b543a908fbe3e2bccada4341df2f5";
 
 #ifdef Q_OS_WIN
     #define SETTINGS    QSettings(AppNameLower+".ini", QSettings::IniFormat)

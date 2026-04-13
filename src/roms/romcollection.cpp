@@ -39,12 +39,13 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
 #include <QProgressDialog>
-#include <QTime>
+#include <QElapsedTimer>
 
 #include <QtSql/QSqlQuery>
-#include <QtXml/QDomDocument>
 
 
 RomCollection::RomCollection(QStringList fileTypes, QStringList romPaths, QWidget *parent) : QObject(parent)
@@ -59,7 +60,7 @@ RomCollection::RomCollection(QStringList fileTypes, QStringList romPaths, QWidge
 
 
 Rom RomCollection::addRom(QByteArray *romData, QString fileName, QString directory, QString zipFile,
-                          QSqlQuery query, bool ddRom)
+                          QSqlQuery *query, bool ddRom)
 {
     Rom currentRom;
 
@@ -76,19 +77,19 @@ Rom RomCollection::addRom(QByteArray *romData, QString fileName, QString directo
     currentRom.zipFile = zipFile;
     currentRom.sortSize = romData->size();
 
-    query.bindValue(":filename",      currentRom.fileName);
-    query.bindValue(":directory",     currentRom.directory);
-    query.bindValue(":internal_name", currentRom.internalName);
-    query.bindValue(":md5",           currentRom.romMD5);
-    query.bindValue(":zip_file",      currentRom.zipFile);
-    query.bindValue(":size",          currentRom.sortSize);
+    query->bindValue(":filename",      currentRom.fileName);
+    query->bindValue(":directory",     currentRom.directory);
+    query->bindValue(":internal_name", currentRom.internalName);
+    query->bindValue(":md5",           currentRom.romMD5);
+    query->bindValue(":zip_file",      currentRom.zipFile);
+    query->bindValue(":size",          currentRom.sortSize);
 
     if (ddRom)
-        query.bindValue(":dd_rom", 1);
+        query->bindValue(":dd_rom", 1);
     else
-        query.bindValue(":dd_rom", 0);
+        query->bindValue(":dd_rom", 0);
 
-    query.exec();
+    query->exec();
 
     if (!ddRom)
         initializeRom(&currentRom, false);
@@ -152,10 +153,10 @@ int RomCollection::addRoms()
                             *romData = byteswap(*romData);
 
                         if (romData->left(4).toHex() == "80371240") { //Z64 ROM
-                            roms.append(addRom(romData, zippedFile, romPath, fileName, query));
+                            roms.append(addRom(romData, zippedFile, romPath, fileName, &query));
                             romCount++;
                         } else if (romData->left(4).toHex() == "e848d316") { //64DD ROM
-                            ddRoms.append(addRom(romData, zippedFile, romPath, fileName, query, true));
+                            ddRoms.append(addRom(romData, zippedFile, romPath, fileName, &query, true));
                             romCount++;
                         }
 
@@ -170,10 +171,10 @@ int RomCollection::addRoms()
                         *romData = byteswap(*romData);
 
                     if (romData->left(4).toHex() == "80371240") { //Z64 ROM
-                        roms.append(addRom(romData, fileName, romPath, "", query));
+                        roms.append(addRom(romData, fileName, romPath, "", &query));
                         romCount++;
                     } else if (romData->left(4).toHex() == "e848d316") { //64DD ROM
-                        ddRoms.append(addRom(romData, fileName, romPath, "", query, true));
+                        ddRoms.append(addRom(romData, fileName, romPath, "", &query, true));
                         romCount++;
                     }
 
@@ -198,13 +199,13 @@ int RomCollection::addRoms()
     database.close();
 
     //Emit signals for regular roms
-    qSort(roms.begin(), roms.end(), romSorter);
+    std::sort(roms.begin(), roms.end(), romSorter);
 
     for (int i = 0; i < roms.size(); i++)
         emit romAdded(&roms[i], i);
 
     //Emit signals for 64DD roms
-    qSort(ddRoms.begin(), ddRoms.end(), romSorter);
+    std::sort(ddRoms.begin(), ddRoms.end(), romSorter);
 
     for (int i = 0; i < ddRoms.size(); i++)
         emit ddRomAdded(&ddRoms[i]);
@@ -215,7 +216,7 @@ int RomCollection::addRoms()
 }
 
 
-int RomCollection::cachedRoms(bool imageUpdated)
+int RomCollection::cachedRoms(bool imageUpdated, bool onStartup)
 {
     emit updateStarted(imageUpdated);
 
@@ -230,12 +231,26 @@ int RomCollection::cachedRoms(bool imageUpdated)
     if (romCount == -1) //Nothing cached so try adding ROMs instead
         return addRoms();
 
+
+    //Check if user has data from TheGamesDB API v1 and update them to v2 data
+    if (onStartup) {
+        bool onV1 = false;
+        QDir cacheDir(getCacheLocation());
+
+        if (!cacheDir.exists() && SETTINGS.value("Other/downloadinfo", "").toString() == "true")
+            onV1 = true;
+
+        if (onV1)
+            return addRoms();
+    }
+
+
     QList<Rom> roms;
     QList<Rom> ddRoms;
 
     int count = 0;
     bool showProgress = false;
-    QTime checkPerformance;
+    QElapsedTimer checkPerformance;
 
     while (query.next())
     {
@@ -283,13 +298,13 @@ int RomCollection::cachedRoms(bool imageUpdated)
         progress->close();
 
     //Emit signals for regular roms
-    qSort(roms.begin(), roms.end(), romSorter);
+    std::sort(roms.begin(), roms.end(), romSorter);
 
     for (int i = 0; i < roms.size(); i++)
         emit romAdded(&roms[i], i);
 
     //Emit signals for 64DD roms
-    qSort(ddRoms.begin(), ddRoms.end(), romSorter);
+    std::sort(ddRoms.begin(), ddRoms.end(), romSorter);
 
     for (int i = 0; i < ddRoms.size(); i++)
         emit ddRomAdded(&ddRoms[i]);
@@ -370,70 +385,47 @@ void RomCollection::initializeRom(Rom *currentRom, bool cached)
         } else {
             //tweak internal name by adding spaces to get better results
             QString search = currentRom->internalName;
-            search.replace(QRegExp("([a-z])([A-Z])"),"\\1 \\2");
-            search.replace(QRegExp("([^ \\d])(\\d)"),"\\1 \\2");
+            search.replace(QRegularExpression("([a-z])([A-Z])"),"\\1 \\2");
+            search.replace(QRegularExpression("([^ \\d])(\\d)"),"\\1 \\2");
             scraper->downloadGameInfo(currentRom->romMD5, search);
         }
 
     }
 
     if (SETTINGS.value("Other/downloadinfo", "").toString() == "true") {
-        QString cacheDir = getDataLocation() + "/cache";
-
-        QString dataFile = cacheDir + "/" + currentRom->romMD5.toLower() + "/data.xml";
+        QString dataFile = getCacheLocation() + currentRom->romMD5.toLower() + "/data.json";
         QFile file(dataFile);
 
         file.open(QIODevice::ReadOnly);
-        QString dom = file.readAll();
+        QString data = file.readAll();
         file.close();
 
-        QDomDocument xml;
-        xml.setContent(dom);
-        QDomNode game = xml.elementsByTagName("Game").at(0);
+        QJsonDocument document = QJsonDocument::fromJson(data.toUtf8());
+        QJsonObject json = document.object();
 
         //Remove any non-standard characters
-        QString regex = "[^A-Za-z 0-9 \\.,\\?'""!@#\\$%\\^&\\*\\(\\)-_=\\+;:<>\\/\\\\|\\}\\{\\[\\]`~]*";
+        QString regex = "[^A-Za-z 0-9 \\.,\\?'""!@#\\$%\\^&\\*\\(\\)-_=\\+;:<>\\/\\\\|\\}\\{\\[\\]`~é]*";
 
-        currentRom->gameTitle = game.firstChildElement("GameTitle").text().remove(QRegExp(regex));
+        currentRom->gameTitle = json.value("game_title").toString().remove(QRegularExpression(regex));
         if (currentRom->gameTitle == "") currentRom->gameTitle = getTranslation("Not found");
 
-        currentRom->releaseDate = game.firstChildElement("ReleaseDate").text();
+        currentRom->releaseDate = json.value("release_date").toString();
+        currentRom->sortDate = json.value("release_date").toString();
+        currentRom->releaseDate.replace(QRegularExpression("(\\d{4})-(\\d{2})-(\\d{2})"), "\\2/\\3/\\1");
 
-        //Fix missing 0's in date
-        currentRom->releaseDate.replace(QRegExp("^(\\d)/(\\d{2})/(\\d{4})"), "0\\1/\\2/\\3");
-        currentRom->releaseDate.replace(QRegExp("^(\\d{2})/(\\d)/(\\d{4})"), "\\1/0\\2/\\3");
-        currentRom->releaseDate.replace(QRegExp("^(\\d)/(\\d)/(\\d{4})"), "0\\1/0\\2/\\3");
+        currentRom->overview = json.value("overview").toString().remove(QRegularExpression(regex));
+        currentRom->esrb = json.value("rating").toString();
 
-        currentRom->sortDate = currentRom->releaseDate;
-        currentRom->sortDate.replace(QRegExp("(\\d{2})/(\\d{2})/(\\d{4})"), "\\3-\\1-\\2");
-
-        currentRom->overview = game.firstChildElement("Overview").text().remove(QRegExp(regex));
-        currentRom->esrb = game.firstChildElement("ESRB").text();
-
-        int count = 0;
-        QDomNode genreNode = game.firstChildElement("Genres").firstChild();
-        while(!genreNode.isNull())
-        {
-            if (count != 0)
-                currentRom->genre += "/" + genreNode.toElement().text();
-            else
-                currentRom->genre = genreNode.toElement().text();
-
-            genreNode = genreNode.nextSibling();
-            count++;
-        }
-
-        currentRom->publisher = game.firstChildElement("Publisher").text();
-        currentRom->developer = game.firstChildElement("Developer").text();
-        currentRom->rating = game.firstChildElement("Rating").text();
+        currentRom->genre = json.value("genres").toString();
+        currentRom->publisher = json.value("publisher").toString();
+        currentRom->developer = json.value("developer").toString();
 
         foreach (QString ext, QStringList() << "jpg" << "png")
         {
-            QString imageFile = getDataLocation() + "/cache/"
-                                + currentRom->romMD5.toLower() + "/boxart-front." + ext;
+            QString imageFile = getCacheLocation() + currentRom->romMD5.toLower() + "/boxart-front." + ext;
             QFile cover(imageFile);
 
-            if (cover.exists()&& currentRom->image.load(imageFile)) {
+            if (cover.exists() && currentRom->image.load(imageFile)) {
                 currentRom->imageExists = true;
                 break;
             }
@@ -471,17 +463,20 @@ void RomCollection::setupDatabase()
         QMessageBox::warning(parent, tr("Database Not Loaded"),
                              tr("Could not connect to Sqlite database. Application may misbehave."));
 
-    QSqlQuery version = database.exec("PRAGMA user_version");
+    QSqlQuery version(database);
+    version.exec("PRAGMA user_version");
     version.next();
 
     if (version.value(0).toInt() != dbVersion) { //old database version, reset rom_collection
         version.finish();
 
-        database.exec("DROP TABLE rom_collection");
-        database.exec("PRAGMA user_version = " + QString::number(dbVersion));
+        QSqlQuery drop(database);
+        drop.exec("DROP TABLE rom_collection; PRAGMA user_version = " + QString::number(dbVersion));
+        drop.finish();
     }
 
-    database.exec(QString()
+    QSqlQuery create(database);
+    create.exec(QString()
                     + "CREATE TABLE IF NOT EXISTS rom_collection ("
                         + "rom_id INTEGER PRIMARY KEY ASC, "
                         + "filename TEXT NOT NULL, "
@@ -491,6 +486,7 @@ void RomCollection::setupDatabase()
                         + "zip_file TEXT, "
                         + "size INTEGER, "
                         + "dd_rom INTEGER)");
+    create.finish();
 
     database.close();
 }
@@ -499,14 +495,10 @@ void RomCollection::setupDatabase()
 void RomCollection::setupProgressDialog(int size)
 {
     progress = new QProgressDialog(tr("Loading ROMs..."), tr("Cancel"), 0, size, parent);
-#if QT_VERSION >= 0x050000
     progress->setWindowFlags(progress->windowFlags() & ~Qt::WindowCloseButtonHint);
     progress->setWindowFlags(progress->windowFlags() & ~Qt::WindowMinimizeButtonHint);
     progress->setWindowFlags(progress->windowFlags() & ~Qt::WindowContextHelpButtonHint);
-#else
-    progress->setWindowFlags(Qt::Dialog | Qt::WindowTitleHint | Qt::CustomizeWindowHint);
-#endif
-    progress->setCancelButton(0);
+    progress->setCancelButton(nullptr);
     progress->setWindowModality(Qt::WindowModal);
 
     progress->show();

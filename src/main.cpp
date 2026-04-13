@@ -34,8 +34,9 @@
 #include "mainwindow.h"
 
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QGuiApplication>
 #include <QFileInfo>
+#include <QScreen>
 #include <QTranslator>
 
 
@@ -48,10 +49,8 @@ int main(int argc, char *argv[])
 
     if (language != "EN") {
         QString resource = ":/locale/"+AppNameLower+"_"+language.toLower()+".qm";
-        if (QFileInfo(resource).exists()) {
-            translator.load(resource);
+        if (QFileInfo(resource).exists() && translator.load(resource))
             application.installTranslator(&translator);
-        }
     }
 
     QCoreApplication::setOrganizationName(ParentName);
@@ -71,7 +70,7 @@ int main(int argc, char *argv[])
     }
 
     if (windowx == "" && windowy == "") {
-        window.move(QApplication::desktop()->screen()->rect().center() - window.rect().center());
+        window.move(QGuiApplication::primaryScreen()->geometry().center() - window.rect().center());
     }
 
     return application.exec();

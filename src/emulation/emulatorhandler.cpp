@@ -34,14 +34,14 @@
 #include "../global.h"
 #include "../common.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QMessageBox>
 #include <QProcess>
-#include <QCryptographicHash>
+#include <QRegularExpression>
 
 #include <quazip/quazip.h>
 #include <quazip/quazipfile.h>
-
 
 
 EmulatorHandler::EmulatorHandler(QWidget *parent) : QObject(parent)
@@ -72,8 +72,8 @@ void EmulatorHandler::checkStatus(int status)
 
 void EmulatorHandler::cleanTemp()
 {
-    QFile::remove(QDir::tempPath() + "/"+AppNameLower+"/temp.bin");
-    QFile::remove(QDir::tempPath() + "/"+AppNameLower+"/64dd-temp.bin");
+    QFile::remove(QDir::tempPath() + "/" + AppNameLower + "-" + qgetenv("USER") + "/temp.bin");
+    QFile::remove(QDir::tempPath() + "/" + AppNameLower + "-" + qgetenv("USER") + "/64dd-temp.bin");
 }
 
 
@@ -127,7 +127,7 @@ void EmulatorHandler::readOutput()
     QString output = emulatorProc->readAllStandardOutput();
     QStringList outputList = output.split("\n");
 
-    int lastIndex = outputList.lastIndexOf(QRegExp("^.*VI/s.*MHz$"));
+    int lastIndex = outputList.lastIndexOf(QRegularExpression("^.*VI/s.*MHz$"));
 
     if (lastIndex >= 0)
         updateStatus(outputList[lastIndex]);
@@ -166,8 +166,8 @@ void EmulatorHandler::startEmulator(QDir romDir, QString romFileName, QString zi
 
             QByteArray *romData = getZippedRom(fileInZip, zipFile);
 
-            QString tempDir = QDir::tempPath() + "/" + AppNameLower;
-            QDir().mkdir(tempDir);
+            QString tempDir = QDir::tempPath() + "/" + AppNameLower + "-" + qgetenv("USER");
+            QDir().mkpath(tempDir);
 
             romPath = tempDir + tempName;
             QFile tempRom(romPath);

@@ -211,7 +211,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, int activeTab) : QDialog(parent)
           << (QStringList() << tr("Small")       << "Small")
           << (QStringList() << tr("Medium")      << "Medium")
           << (QStringList() << tr("Large")       << "Large")
-          << (QStringList() << tr("Extra Large") << "Extra Large");
+          << (QStringList() << tr("Extra Large") << "Extra Large")
+          << (QStringList() << tr("Super")       << "Super");
 
     if (SETTINGS.value("Other/downloadinfo", "").toString() == "true")
         populateTableAndListTab(true);
@@ -390,7 +391,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, int activeTab) : QDialog(parent)
 
     QList<QStringList> languages;
     languages << (QStringList() << QString::fromUtf8("English")  << "EN")
-              << (QStringList() << QString::fromUtf8("Français") << "FR");
+              << (QStringList() << QString::fromUtf8("Français") << "FR")
+              << (QStringList() << QString::fromUtf8("Русский") << "RU");
 
     downloadEnable << ui->tableSizeLabel
                    << ui->tableSizeBox
@@ -429,6 +431,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, int activeTab) : QDialog(parent)
     connect(ui->languageBox, SIGNAL(currentIndexChanged(int)), this, SLOT(updateLanguageInfo()));
 
 
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(tr("OK"));
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(tr("Cancel"));
+
     connect(ui->buttonBox, SIGNAL(accepted()), this, SLOT(editSettings()));
     connect(ui->buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
 }
@@ -456,8 +461,8 @@ void SettingsDialog::addRomDirectory()
     if (path != "") {
         //check for duplicates
         bool found = false;
-        foreach (QListWidgetItem *item, ui->romList->findItems("*", Qt::MatchWildcard))
-            if (path == item->text())
+        for (int i = 0; i < ui->romList->count(); i++)
+            if (path == ui->romList->item(i)->text())
                 found = true;
 
         if (!found)
@@ -596,8 +601,8 @@ void SettingsDialog::editSettings()
     SETTINGS.setValue("Saves/flash", ui->flashPath->text());
 
     QStringList romDirectories;
-    foreach (QListWidgetItem *item, ui->romList->findItems("*", Qt::MatchWildcard))
-        romDirectories << item->text();
+    for (int i = 0; i < ui->romList->count(); i++)
+        romDirectories << ui->romList->item(i)->text();
 
     SETTINGS.setValue("Paths/roms", romDirectories.join("|"));
 
@@ -644,9 +649,9 @@ void SettingsDialog::editSettings()
 
     //Table tab
     QStringList tableVisibleItems;
-    foreach (QListWidgetItem *item, ui->tableCurrentList->findItems("*", Qt::MatchWildcard))
-        if (available.contains(item->data(Qt::UserRole).toString()))
-            tableVisibleItems << item->data(Qt::UserRole).toString();
+    for (int i = 0; i < ui->tableCurrentList->count(); i++)
+        if (available.contains(ui->tableCurrentList->item(i)->data(Qt::UserRole).toString()))
+            tableVisibleItems << ui->tableCurrentList->item(i)->data(Qt::UserRole).toString();
 
     SETTINGS.setValue("Table/columns", tableVisibleItems.join("|"));
 
@@ -689,9 +694,9 @@ void SettingsDialog::editSettings()
 
     //List tab
     QStringList listVisibleItems;
-    foreach (QListWidgetItem *item, ui->listCurrentList->findItems("*", Qt::MatchWildcard))
-        if (available.contains(item->data(Qt::UserRole).toString()))
-            listVisibleItems << item->data(Qt::UserRole).toString();
+    for (int i = 0; i <  ui->listCurrentList->count(); i++)
+        if (available.contains(ui->listCurrentList->item(i)->data(Qt::UserRole).toString()))
+            listVisibleItems << ui->listCurrentList->item(i)->data(Qt::UserRole).toString();
 
     SETTINGS.setValue("List/columns", listVisibleItems.join("|"));
 
@@ -803,7 +808,6 @@ void SettingsDialog::populateAvailable(bool downloadItems) {
                   << "Genre"
                   << "Publisher"
                   << "Developer"
-                  << "Rating"
                   << "Game Cover";
 
         labelOptions << "Game Title"
@@ -815,8 +819,7 @@ void SettingsDialog::populateAvailable(bool downloadItems) {
                     << "ESRB"
                     << "Genre"
                     << "Publisher"
-                    << "Developer"
-                    << "Rating";
+                    << "Developer";
     }
 
     available.sort();
@@ -1128,9 +1131,8 @@ void SettingsDialog::updateLanguageInfo()
     QTranslator translator;
     QString language = ui->languageBox->itemData(ui->languageBox->currentIndex()).toString().toLower();
     QString resource = ":/locale/"+AppNameLower+"_"+language+".qm";
-    if (QFileInfo(resource).exists()) {
-        translator.load(resource);
+    if (QFileInfo(resource).exists() && translator.load(resource))
         ui->languageInfoLabel->setText(translator.translate("SettingsDialog", sourceText));
-    } else
+    else
         ui->languageInfoLabel->setText(sourceText);
 }
