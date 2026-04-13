@@ -3,7 +3,7 @@ Section: otherosfs
 Priority: optional
 Maintainer: Dan Hasting <maintainer@hasting.email>
 Rules-Requires-Root: no
-Build-Depends: debhelper-compat (= 12), qtbase5-dev, libquazip5-dev, libqt5sql5-sqlite
+Build-Depends: debhelper-compat (= 12), cmake, qt6-base-dev, libquazip1-qt6-dev, libqt6sql6-sqlite
 Standards-Version: 4.5.0
 Homepage: https://github.com/dh4/cen64-qt
 Vcs-Git: https://github.com/dh4/cen64-qt-debian.git
@@ -11,7 +11,7 @@ Vcs-Browser: https://github.com/dh4/cen64-qt-debian/
 
 Package: cen64-qt
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, libqt5sql5-sqlite
+Depends: ${shlibs:Depends}, ${misc:Depends}, libqt6sql6-sqlite
 Recommends: cen64
 Description: Cross-platform graphical frontend for the CEN64 emulator
  CEN64-Qt is a cross-platform graphical frontend for the CEN64 emulator. Since

@@ -1,0 +1,20 @@
+From: Bastian Germann <bage@debian.org>
+Date: Mon, 13 Apr 2026 23:30:30 +0200
+Subject: [PATCH] Prevent generating script
+
+Even with calling qt-generate-deploy-app-script with the right syntax,
+we do not want the library bundle on Debian.
+---
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -88,10 +88,3 @@ install(TARGETS cen64-qt
+     BUNDLE DESTINATION .
+     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+ )
+-
+-qt_generate_deploy_app_script(
+-    TARGET cen64-qt
+-    FILENAME_VARIABLE deploy_script
+-    NO_UNSUPPORTED_PLATFORM_ERROR
+-)
+-install(SCRIPT ${deploy_script})

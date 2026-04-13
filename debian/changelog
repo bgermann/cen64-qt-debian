@@ -1,5 +1,6 @@
-cen64-qt (20200219-alpha-2) UNRELEASED; urgency=medium
+cen64-qt (20241110-alpha-1) UNRELEASED; urgency=medium
 
+  * Build with Qt6.
   * Move source package lintian overrides to debian/source.
   * Set debhelper-compat version in Build-Depends.
   * Set upstream metadata fields: Bug-Database, Bug-Submit, Repository,
